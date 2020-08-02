@@ -1,0 +1,428 @@
+<html>
+<head>
+<style>
+.adr{
+  color:#6cc;
+}
+.Chunk{
+  color:#f34;
+}
+.On{
+  color:#ff0;
+}
+.Off{
+  color:#f60;
+}
+.Prog{
+  color:#f8f;
+}
+.Ctl{
+  color:#2ff;
+}
+.Other{
+  color:#f0f;
+}
+.delta{
+  color:#cc0;
+}
+.meta{
+  color:#0f0
+}
+html{
+  width:100%;
+  height:100%;
+}
+body{
+  width:100%;
+  height:100%;
+  background:#234;
+  color:#ccf;
+}
+body a{
+  color:#fff;
+}
+#base{
+  width:800px;
+  height:fit-content;
+  background:#000;
+  margin:10px auto;
+}
+#text{
+  color:#fff;
+  width: 800px;
+  min-height:300px;
+  margin:0px auto;
+  padding:8px;
+  font-family: monospace;
+}
+</style>
+</head>
+<body>
+<h1>MIDI Dump</h1>
+<input id="file" type="file"/><br/>
+Repository : <a href="https://github.com/g200kg/midi-dump" target="_blank">https://github.com/g200kg/midi-dump</a>
+<hr/>
+<div id="base">
+<pre id="text" ondragover="DragOver(event);" ondrop="Drop(event);">
+</pre>
+<br/>
+<button id="dumpall" style="height:30px;width:120px;display:none" onclick="DumpAll()">Dump All</button>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/1.0.30/encoding.min.js"></script>
+<script>
+
+var output="";
+var runstat=0;
+var dumpmax=1000;
+var databuf=null;
+
+function Clear(){
+  output="";
+  document.getElementById("text").innerHTML="";
+}
+function WriteLine(line){
+  output+=(line+"<br/>");
+}
+function Get4u(data,offs){
+  return (data[offs]<<24)+(data[offs+1]<<16)+(data[offs+2]<<8)+data[offs+3];
+}
+function Get3u(data,offs){
+  return (data[offs]<<16)+(data[offs+1]<<8)+data[offs+2];
+}
+function Get2u(data,offs){
+  return (data[offs]<<8)+data[offs+1];
+}
+function Get2d(data,offs){
+  let d=Get2u(data,offs);
+  if(d>=32768)
+    d -= 65536;
+  return d;
+}
+function Get1d(data,offs){
+  let d=data[offs];
+  if(d>=128)
+    d-=256;
+  return d;
+}
+function Get4s(data,offs){
+  return GetStr(data,offs,4);
+}
+function ChStr(x){
+  return ("ch:"+((x&0xf)+1)+"  ").slice(0,5);
+}
+function CCStr(x){
+  return ("CC#"+(x)+"   ").slice(0,6);
+}
+function GetStr(data,offs,len){
+  const array=data.slice(offs,offs+len);
+  return Encoding.convert(array,{to:"UNICODE",from:"AUTO",type:"string"});
+  let s="";
+  for(let i=0;i<len;++i){
+      s+=String.fromCharCode(data[offs+i]);
+  }
+  s=s.replace(/\n/g,"\\n");
+  return s;
+}
+function ToHex(data,n){
+  return ("000000"+data.toString(16)).slice(-n);
+}
+function Delta(data,offs){
+  let delta=0;
+  let offs0=offs;
+  while((data[offs]&0x80)==0x80){
+    delta=(delta<<7)|(data[offs]&0x7f);
+    ++offs;
+  }
+  delta|=data[offs]&0x7f;
+  ++offs;
+  return {val:delta,size:offs-offs0};
+}
+function DumpBytes(data,offs,n){
+  let str=[""];
+  let line=0;
+  let i;
+  while(n>8){
+    str[line]+=`<span class="adr">${ToHex(offs,6)}</span> `;
+    for(i=0;i<8;++i){
+      str[line]+=ToHex(data[offs+i],2)+" ";
+    }
+    n-=8;
+    offs+=8;
+    str[++line]="";
+  }
+  str[line]+=`<span class="adr">${ToHex(offs,6)}</span> `;
+  for(i=0;i<n;++i){
+    str[line]+=ToHex(data[offs+i],2)+" ";
+  }
+  while(i<8){
+    str[line]+="   ";
+    ++i;
+  }
+  return str;
+}
+function Line(data,offs,size,val){
+  const b=DumpBytes(data,offs,size);
+  let i;
+  for(i=0;i<b.length-1;++i)
+    WriteLine(b[i]);
+  WriteLine(`${b[i]} ${val}`);
+}
+function MThd(data,offs){
+  Line(data,offs,2, `Format (${Get2u(data,offs)})`);
+  offs+=2;
+  Line(data,offs,2, `NumberOfTrack (${Get2u(data,offs)})`);
+  offs+=2;
+  Line(data,offs,2, `TimeBase (${Get2d(data,offs)})`);
+  offs+=2;
+  return offs;
+}
+function MetaEvent(data,offs){
+  let delta=Delta(data,offs+2);
+  let len=2+delta.size+delta.val;
+  switch(data[offs+1]){
+  case 0:
+    return {val:`Meta:Sequence (${Get2u(data,offs+2)})`, size:len};
+  case 1:
+    return {val:`Meta:Text "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 2:
+    return {val:`Meta:Copyright "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 3:
+    return {val:`Meta:TrackName "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 4:
+    return {val:`Meta:Instrument "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 5:
+    return {val:`Meta:Lyric "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 6:
+    return {val:`Meta:Marker "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 7:
+    return {val:`Meta:CuePoint "${GetStr(data,offs+2+delta.size,delta.val)}"`,size:len};
+  case 8:
+  case 9:
+  case 0xa:
+  case 0xb:
+  case 0xc:
+  case 0xd:
+  case 0xe:
+  case 0xf:
+    return {val:`Meta:Unknown "${GetStr(data,offs+2+delta.size,delta.val)}"`, size:len};
+  case 0x20:
+    return {val:`Meta:ChannelPrefix`,size:len};
+  case 0x21:
+    return {val:`Meta:PortPrefix`,size:len};
+  case 0x2f:
+    return {val:"Meta:EndOfTrack", size:len, eot:true};
+  case 0x51:
+    const t=Get3u(data,offs+3);
+    return {val:`Meta:SetTempo (${t} = ${60/(t*0.000001)})`, size:len};
+  case 0x54:
+    return {val:"Meta:SMPTEOffset", size:len};
+  case 0x58:
+    return {val:`Meta:TimeSig (${data[offs+3]}/${1<<data[offs+4]}, Metronome=${data[offs+5]}MIDICLK, ${data[offs+6]}/32=24MIDICLK)`, size:len};
+  case 0x59:
+    const n=Get1d(data,offs+3);
+    const keys=[
+      ["Cb Maj","Gb Maj","Db Maj","Ab Maj","Eb Maj","Bb Maj","F Maj","C Maj","G Maj","D Maj","A Maj","E Maj","B Maj","F# Maj","C# Maj"],
+      ["Ab min","Eb min","Bb min","F min","C min","G min","D min","A min","E min","B min","F# min","C# min","G# min","D# min","A# min"]
+    ]
+    return {val:`Meta:KeySig (${n} ${["major","minor"][data[offs+4]&1]} = ${keys[data[offs+4]&1][n+7]})`, size:len};
+  case 0x7f:
+    return {val:"Meta:SeqSpecific",size:len};
+  }
+}
+function CcName(cc){
+  const cctab=[
+    "BankSel",      "Modulat",      "BreathC",      "       ",      //0
+    "FootCtl",      "PortaTm",      "DataEnt",      "ChVolum",
+    "Balance",      "       ",      "Pan    ",      "Express",
+    "Effect1",      "Effect2",      "       ",      "       ",
+    "GenPur1",      "GenPur2",      "GenPur3",      "GenPur4",      //16
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "BankLSB",      "ModuLSB",      "BrthLSB",      "       ",      //32
+    "FootLSB",      "PortLSB",      "DEntLSB",      "ChVoLSB",
+    "BalaLSB",      "       ",      "PanLSB ",      "ExprLSB",
+    "Eff1LSB",      "Eff2LSB",      "       ",      "       ",
+    "GeP1LSB",      "GeP2LSB",      "GeP3LSB",      "GeP4LSB",      //48
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "Sustain",      "Porta  ",      "Sostenu",      "SoftPed",      //64
+    "Legato ",      "Hold2  ",      "SndCtl1",      "SndCtl2",
+    "SndCtl3",      "SndCtl4",      "SndCtl5",      "SndCtl6",
+    "SndCtl7",      "SndCtl8",      "SndCtl9",      "SndCt10",
+    "GenPur5",      "GenPur6",      "GenPur7",      "GenPur8",      //80
+    "PortaCt",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "Eff1Dep",
+    "Eff2Dep",      "Eff3Dep",      "Eff4Dep",      "Eff5Dep",
+    "DataInc",      "DataDec",      "NRPNLSB",      "NPRNMSB",      //96
+    "RPNLSB ",      "RPNMSB ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",      //112
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+    "       ",      "       ",      "       ",      "       ",
+  ];
+  return cctab[cc];
+}
+function ChVoice(stat,b1,b2){
+  switch(stat&0xf0){
+  case 0x80:
+    return {val:`NoteOff (${ChStr(stat)} note:${b1} velo:${b2})`,size:3,class:"Off"};
+  case 0x90:
+    return {val:`NoteOn  (${ChStr(stat)} note:${b1} velo:${b2})`,size:3,class:(b2==0?"Off":"On")};
+  case 0xa0:
+    return {val:`PolyPres (${ChStr(stat)} note:${b1} val:${b2})`,size:3,class:"Other"};
+  case 0xb0:
+    return {val:`CtrlChg (${ChStr(stat)} ${CCStr(b1)}(${CcName(b1)}) val:${b2})`,size:3,class:"Ctl"};
+  case 0xc0:
+    return {val:`ProgChg (${ChStr(stat)} pg:${b1})`,size:2,class:"Prog"};
+  case 0xd0:
+    return {val:`ChPres (${ChStr(stat)} val:${b1})`,size:2,class:"Other"};
+  case 0xe0:
+    return {val:`PitchBend (${ChStr(stat)} val:${b1+(b2<<7)-8192})`,size:3,class:"Other"};
+  }
+}
+function SysEx(data,offs){
+  let i=offs;
+  for(;data[i]!=0xf7;++i){
+  }
+  return {val:"SysEx", size:i-offs+1, eto:false};
+}
+function Event(data,offs,runstat){
+  if(data[offs]==0xff){
+    o=MetaEvent(data,offs);
+    return {val:o.val, size:o.size, class:"meta",eot:o.eot};
+  }
+  if(data[offs]==0xf0){
+    o=SysEx(data,offs);
+    return o;
+  }
+  if(data[offs]<0x80){
+    if(runstat>=0x80&&runstat<0xf0){
+      o=ChVoice(runstat,data[offs],data[offs+1]);
+      o={val:`${o.val}(RunStat)`, size:o.size-1, class:o.class};
+    }
+    else{
+      let j=0;
+      for(;data[offs+j]<0x80;++j)
+        ;
+      o={val:"Running Status Error", size:j};
+    }
+  }
+  else{
+    o=ChVoice(data[offs],data[offs+1],data[offs+2]);
+  }
+  return o;
+}
+function MTrk(data,offs,eoc){
+  runstat=0;
+  for(let i=0;;++i){
+    if(offs>=dumpmax)
+      return offs;
+    const offs0=offs;
+    const delta=Delta(data,offs);
+    offs+=delta.size;
+    const ev=Event(data,offs,runstat);
+    if(data[offs]>0x80&&data[offs]<0xf0)
+      runstat=data[offs];
+    const d=(delta.val+"    ").slice(0,4);
+    Line(data,offs0,delta.size+ev.size, `<span class="delta">delta ${d} :</span> <span class="${ev.class}">${ev.val}</span>`);
+    offs+=ev.size;
+    if(ev.eot){
+      if(offs<eoc)
+        Line(data,offs,eoc-offs,"Extra Data after EndOfTrack");
+      return offs;
+    }
+    if(offs>=eoc){
+      Line(data,offs,0,"EndOfTrack Not Found");
+      console.log("EndOfTrack Not Found");
+      return offs;
+    }
+  }
+}
+function Chunk(buf,offs){
+  const type=Get4s(buf,offs);
+  const length=Get4u(buf,offs+4);
+  const eoc=offs+8+length;
+  Line(buf,offs,4, `<span class="chunk">Chunk ("${type}")</span>`);
+  Line(buf,offs+4,4,`<span class="chunk">length (${length})</span>`);
+  offs+=8;
+  switch(type){
+  case "MThd": offs=MThd(buf,offs); break;
+  case "MTrk": offs=MTrk(buf,offs,eoc); break;
+  }
+  if(offs>=dumpmax)
+    return;
+  if(offs!=eoc){
+    WriteLine("End of Chunk not match..");
+  }
+  return eoc;
+}
+function DumpAll(){
+  console.log("DumpAll")
+  dumpmax=200000;
+  Dump(databuf);
+  document.getElementById("dumpall").style.display="none";
+}
+function Dump(buf){
+  console.log("Dump");
+  Clear();
+  let offs=0;
+  while(offs<buf.length){
+    offs=Chunk(buf,offs);
+    WriteLine("");
+    if(offs>=dumpmax)
+      break;
+  }
+  if(dumpmax==1000){
+    WriteLine("...and more...");
+    document.getElementById("text").innerHTML=output;
+    document.getElementById("dumpall").style.display="block";
+  }
+  else {
+    document.getElementById("text").innerHTML=output;
+    document.getElementById("dumpall").style.display="none";
+  }
+}
+function DragOver(ev){
+  console.log("dragover");
+  ev.stopPropagation();
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'copy';
+}
+function Drop(ev){
+  console.log("drop");
+  ev.stopPropagation();
+  ev.preventDefault();
+  var files = ev.dataTransfer.files; 
+  var output = [];
+  for (var i = 0; i < files.length; i++) {
+    document.getElementById('output').innerHTML += files[i].name + '(' + files[i].size + ') '
+      + files[i].lastModifiedDate.toLocaleDateString() + files[i].lastModifiedDate.toLocaleTimeString() +  ' - ' + files[i].type + '<br/>';
+  }
+}
+function SelectFile(ev){
+  const file=ev.target.files[0];
+  const reader=new FileReader();
+  reader.onload=()=>{
+    databuf=new Uint8Array(reader.result);
+    dumpmax=1000;
+    Dump(databuf);
+  };
+  reader.readAsArrayBuffer(file);
+}
+function Init(){
+  const file=document.getElementById("file");
+  const base=document.getElementById("base");
+  const text=document.getElementById("text");
+  file.addEventListener("change", SelectFile);
+  text.addEventListener("drapover", DragOver);
+  text.addEventListener("drop", Drop);
+}
+
+window.onload=Init;
+</script>
+</body>
+</html>
