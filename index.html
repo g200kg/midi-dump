@@ -46,24 +46,26 @@ body a{
   height:fit-content;
   background:#000;
   margin:10px auto;
+  padding:8px;
 }
 #text{
   color:#fff;
-  width: 800px;
-  min-height:300px;
-  margin:0px auto;
-  padding:8px;
+  width: 100%;;
+  min-height:100px;
+  margin:0;
+  padding:0;
   font-family: monospace;
 }
 </style>
 </head>
 <body>
 <h1>MIDI Dump</h1>
+<div style="position:absolute;right:10px;top:0px"> Repository : <a href="https://github.com/g200kg/midi-dump" target="_blank">https://github.com/g200kg/midi-dump</a></div>
 <input id="file" type="file"/><br/>
-Repository : <a href="https://github.com/g200kg/midi-dump" target="_blank">https://github.com/g200kg/midi-dump</a>
 <hr/>
 <div id="base">
-<pre id="text" ondragover="DragOver(event);" ondrop="Drop(event);">
+<pre id="text" ondragover="DragOver(event);" ondragleave="DragLeave(event);" ondrop="Drop(event);">
+  --- Drop MIDI (SMF) file Here or Open from FileOpen menu. ---
 </pre>
 <br/>
 <button id="dumpall" style="height:30px;width:120px;display:none" onclick="DumpAll()">Dump All</button>
@@ -78,7 +80,7 @@ var databuf=null;
 
 function Clear(){
   output="";
-  document.getElementById("text").innerHTML="";
+  document.getElementById("text").innerHTML="Drop MIDI (SMF) file Here.";
 }
 function WriteLine(line){
   output+=(line+"<br/>");
@@ -386,22 +388,32 @@ function Dump(buf){
     document.getElementById("dumpall").style.display="none";
   }
 }
+function DragLeave(ev){
+  console.log("dragleave")
+  ev.target.style.border="none";
+}
 function DragOver(ev){
   console.log("dragover");
   ev.stopPropagation();
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'copy';
+  console.log(ev.target)
+  ev.target.style.border="1px solid #ff0";
 }
 function Drop(ev){
   console.log("drop");
+  Clear();
   ev.stopPropagation();
   ev.preventDefault();
   var files = ev.dataTransfer.files; 
-  var output = [];
-  for (var i = 0; i < files.length; i++) {
-    document.getElementById('output').innerHTML += files[i].name + '(' + files[i].size + ') '
-      + files[i].lastModifiedDate.toLocaleDateString() + files[i].lastModifiedDate.toLocaleTimeString() +  ' - ' + files[i].type + '<br/>';
-  }
+  ev.target.style.border="none";
+  const reader=new FileReader();
+  reader.onload=()=>{
+    databuf=new Uint8Array(reader.result);
+    dumpmax=1000;
+    Dump(databuf);
+  };
+  reader.readAsArrayBuffer(files[0]);
 }
 function SelectFile(ev){
   const file=ev.target.files[0];
