@@ -77,6 +77,9 @@ var output="";
 var runstat=0;
 var dumpmax=1000;
 var databuf=null;
+var sysexid={"40":"Kawai","41":"Roland","42":"Korg","43":"Yamaha","44":"Casio",
+  "47":"Akai","52":"Zoom","7e":"UniversalNonRealTime","7f":"UniversalRealTime"
+};
 
 function Clear(){
   output="";
@@ -106,6 +109,16 @@ function Get1d(data,offs){
     d-=256;
   return d;
 }
+function GetManufacturer(data,offs){
+  let id="";
+  if(data[offs]!=0)
+    id=("00"+data[offs].toString(16)).slice(-2);
+  else
+    id="00"+("00"+data[offs+1].toString(16)).slice(-2)+("00"+data[offs+2].toString(16)).slice(-2);
+  if(sysexid[id])
+    return `${id} = "${sysexid[id]}"`;
+  return id;
+}
 function Get4s(data,offs){
   return GetStr(data,offs,4);
 }
@@ -117,11 +130,8 @@ function CCStr(x){
 }
 function GetStr(data,offs,len){
   const array=data.slice(offs,offs+len);
-  return Encoding.convert(array,{to:"UNICODE",from:"AUTO",type:"string"});
-  let s="";
-  for(let i=0;i<len;++i){
-      s+=String.fromCharCode(data[offs+i]);
-  }
+  console.log(array)
+  let s=Encoding.convert(array,{to:"UNICODE",from:"AUTO",type:"string"});
   s=s.replace(/\n/g,"\\n");
   return s;
 }
@@ -287,10 +297,9 @@ function ChVoice(stat,b1,b2){
   }
 }
 function SysEx(data,offs){
-  let i=offs;
-  for(;data[i]!=0xf7;++i){
-  }
-  return {val:"SysEx", size:i-offs+1, eto:false};
+  const len=Delta(data,offs+1);
+  const id=data[offs+1+len.size];
+  return {val:`SysEx (${len.val}, ${GetManufacturer(data,offs+1+len.size)})`, size:len.size+len.val+1};
 }
 function Event(data,offs,runstat){
   if(data[offs]==0xff){
@@ -389,15 +398,12 @@ function Dump(buf){
   }
 }
 function DragLeave(ev){
-  console.log("dragleave")
   ev.target.style.border="none";
 }
 function DragOver(ev){
-  console.log("dragover");
   ev.stopPropagation();
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'copy';
-  console.log(ev.target)
   ev.target.style.border="1px solid #ff0";
 }
 function Drop(ev){
