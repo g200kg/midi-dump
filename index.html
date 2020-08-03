@@ -145,7 +145,10 @@ function CCStr(x){
   return ("CC#"+(x)+"   ").slice(0,6);
 }
 function GetStr(data,offs,len){
-  const array=data.slice(offs,offs+len);
+  let array=data.slice(offs,offs+len);
+  let l=array.indexOf(0);
+  if(l>0)
+    array=array.slice(0,l);
   let s=Encoding.convert(array,{to:"UNICODE",from:"AUTO",type:"string"});
   s=s.replace(/\n/g,"\\n");
   return s;
