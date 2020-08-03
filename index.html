@@ -86,6 +86,7 @@ var output="";
 var runstat=0;
 var dumpmax=1000;
 var databuf=null;
+var rpn=0;
 var sysexid={"40":"Kawai","41":"Roland","42":"Korg","43":"Yamaha","44":"Casio",
   "47":"Akai","52":"Zoom","7e":"UniversalNonRealTime","7f":"UniversalRealTime"
 };
@@ -118,6 +119,13 @@ function Get1d(data,offs){
     d-=256;
   return d;
 }
+function CheckBytes(data,offs,bytes){
+  for(let i=0;i<bytes.length;++i){
+    if(bytes[i]>=0 && data[offs+i]!=bytes[i])
+      return false;
+  }
+  return true;
+}
 function GetSysEx(data,offs){
   let id="";
   if(data[offs]!=0)
@@ -125,12 +133,102 @@ function GetSysEx(data,offs){
   else
     id="00"+("00"+data[offs+1].toString(16)).slice(-2)+("00"+data[offs+2].toString(16)).slice(-2);
   if(sysexid[id]){
-    if(id=="7e" && data[offs+2]==9 && data[offs+3]==1 && data[offs+4]==0xf7)
+    if(id=="7e" && CheckBytes(data,offs+2, [9,1,0xf7]))
       return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM1 System On"`;
-    if(id=="7e" && data[offs+2]==9 && data[offs+3]==2 && data[offs+4]==0xf7)
+    if(id=="7e" && CheckBytes(data,offs+2, [9,2,0xf7]))
       return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM System Off"`;
-    if(id=="7e" && data[offs+2]==9 && data[offs+3]==3 && data[offs+4]==0xf7)
+    if(id=="7e" && CheckBytes(data,offs+2, [9,3,0xf7]))
       return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM2 System On"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x00,0x00,0x7f,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS System Mode Set,${data[offs+7]}"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x00,0x01,-1,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Ch Msg Rx Port,${data[offs+6]},${data[offs+7]}"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x00,0x00,-1,-1,-1,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Master Tune"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x00,0x04,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Master Vol"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x00,0x05,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Master KeyShift"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x00,0x06,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Master Pan"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x00,0x7f,0x00,0x41,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reset"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x00,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Patch Name"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x30,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb Macro"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x31,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb Char"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x32,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb PreLPF"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x33,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb Lev"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x34,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb Time"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x35,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb Fdbk"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x37,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Reverb PreDlyTime"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x38,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Macro"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x39,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus PreLPF"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3a,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Lev"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3b,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Fdbk"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3c,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Delay"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3d,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Rate"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3e,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus Depth"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x3f,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus SendTo Rev"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x40,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Chorus SendTo Delay"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x50,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Macro"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x51,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay PreLPF"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x52,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Time Center"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x53,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Time RatioL"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x54,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Time RatioR"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x55,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Lev Center"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x56,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Lev L"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x57,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Lev R"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x58,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Lev"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x59,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay Fdbk"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x01,0x5a,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Delay SendTo Rev"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x02,0x00,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS EQ LowFreq"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x02,0x01,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS EQ LowGain"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x02,0x02,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS EQ HighFreq"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,0x02,0x03,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS EQ HighGain"`;
+    if(id=="41" && CheckBytes(data,offs+2, [0x42,0x12,0x40,-1,  0x15,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GS Use For Rhythm,${data[offs+5]&0xf}"`;
+    if(id=="43" && CheckBytes(data,offs+2, [0x4c,0x00,0x00,0x7e,0x00,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "XG System On"`;
+    if(id=="7f" && CheckBytes(data,offs+2, [0x04,0x01,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "Master Vol"`;
+    if(id=="7f" && CheckBytes(data,offs+2, [0x04,0x02,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "Master Balance"`;
+    if(id=="7f" && CheckBytes(data,offs+2, [0x04,0x03,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "Master FineTune"`;
+    if(id=="7f" && CheckBytes(data,offs+2, [0x04,0x04,-1,-1,0xf7]))
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "Master CoarseTune"`;
     return `${id} = "${sysexid[id]}"`;
   }
   return id;
@@ -259,6 +357,15 @@ function MetaEvent(data,offs){
     return {val:"Meta:SeqSpecific",size:len};
   }
 }
+function RpnName(x){
+  switch(x){
+  case 0: return "BendSens";
+  case 1: return "FineTune";
+  case 2: return "CoarseTune";
+  case 0x7f7f: return "Null";
+  }
+  return "";
+}
 function CcName(cc){
   const cctab=[
     "BankSel",      "Modulat",      "BreathC",      "       ",      //0
@@ -291,8 +398,8 @@ function CcName(cc){
     "       ",      "       ",      "       ",      "       ",
     "       ",      "       ",      "       ",      "       ",      //112
     "       ",      "       ",      "       ",      "       ",
-    "       ",      "       ",      "       ",      "       ",
-    "       ",      "       ",      "       ",      "       ",
+    "AllSndOff",    "RstALlCtl",    "LocalCtl",     "AllNoteOff",   //120
+    "OmniOff",      "OmniOn ",      "MonoMode",     "PolyMode",
   ];
   return cctab[cc];
 }
@@ -305,7 +412,14 @@ function ChVoice(stat,b1,b2){
   case 0xa0:
     return {val:`PolyPres (${ChStr(stat)} note:${b1} val:${b2})`,size:3,class:"Other"};
   case 0xb0:
-    return {val:`CtrlChg (${ChStr(stat)} ${CCStr(b1)}(${CcName(b1)}) val:${b2})`,size:3,class:"Ctl"};
+    if(b1==100)
+      rpn=(rpn&0xff00)|b2;
+    if(b1==101)
+      rpn=(rpn&0x7f)|(b2<<8);
+    if(b1==6||b1==38||b1==96||b1==97)
+      return {val:`CtrlChg (${ChStr(stat)} ${CCStr(b1)}(${CcName(b1)}:${RpnName(rpn)}) val:${b2})`,size:3,class:"Ctl"};
+    else
+      return {val:`CtrlChg (${ChStr(stat)} ${CCStr(b1)}(${CcName(b1)}) val:${b2})`,size:3,class:"Ctl"};
   case 0xc0:
     return {val:`ProgChg (${ChStr(stat)} pg:${b1})`,size:2,class:"Prog"};
   case 0xd0:
