@@ -56,16 +56,25 @@ body a{
   padding:0;
   font-family: monospace;
 }
+#filelabel{
+  background:#468;
+  border:1px solid #ccf;
+  padding:2px 8px;
+}
+#filelabel:hover{
+  background:#ccf;
+  color:#123;
+}
 </style>
 </head>
 <body>
 <h1>MIDI Dump</h1>
 <div style="position:absolute;right:10px;top:0px"> Repository : <a href="https://github.com/g200kg/midi-dump" target="_blank">https://github.com/g200kg/midi-dump</a></div>
-<input id="file" type="file"/><br/>
+<input id="file" type="file" style="display:none"/>  <label id="filelabel" for="file">Select File : <span id="filename"></span></span></label><br/>
 <hr/>
 <div id="base">
-<pre id="text" ondragover="DragOver(event);" ondragleave="DragLeave(event);" ondrop="Drop(event);">
-  --- Drop MIDI (SMF) file Here or Open from FileOpen menu. ---
+<pre id="text">
+  --- Drop MIDI (SMF) file Here or Open from 'SelectFile' menu. ---
 </pre>
 <br/>
 <button id="dumpall" style="height:30px;width:120px;display:none" onclick="DumpAll()">Dump All</button>
@@ -109,14 +118,21 @@ function Get1d(data,offs){
     d-=256;
   return d;
 }
-function GetManufacturer(data,offs){
+function GetSysEx(data,offs){
   let id="";
   if(data[offs]!=0)
     id=("00"+data[offs].toString(16)).slice(-2);
   else
     id="00"+("00"+data[offs+1].toString(16)).slice(-2)+("00"+data[offs+2].toString(16)).slice(-2);
-  if(sysexid[id])
+  if(sysexid[id]){
+    if(id=="7e" && data[offs+2]==9 && data[offs+3]==1 && data[offs+4]==0xf7)
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM1 System On"`;
+    if(id=="7e" && data[offs+2]==9 && data[offs+3]==2 && data[offs+4]==0xf7)
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM System Off"`;
+    if(id=="7e" && data[offs+2]==9 && data[offs+3]==3 && data[offs+4]==0xf7)
+      return `${id} = "${sysexid[id]}", ${data[offs+1].toString(16)}, "GM2 System On"`;
     return `${id} = "${sysexid[id]}"`;
+  }
   return id;
 }
 function Get4s(data,offs){
@@ -130,7 +146,6 @@ function CCStr(x){
 }
 function GetStr(data,offs,len){
   const array=data.slice(offs,offs+len);
-  console.log(array)
   let s=Encoding.convert(array,{to:"UNICODE",from:"AUTO",type:"string"});
   s=s.replace(/\n/g,"\\n");
   return s;
@@ -236,7 +251,7 @@ function MetaEvent(data,offs){
       ["Cb Maj","Gb Maj","Db Maj","Ab Maj","Eb Maj","Bb Maj","F Maj","C Maj","G Maj","D Maj","A Maj","E Maj","B Maj","F# Maj","C# Maj"],
       ["Ab min","Eb min","Bb min","F min","C min","G min","D min","A min","E min","B min","F# min","C# min","G# min","D# min","A# min"]
     ]
-    return {val:`Meta:KeySig (${n} ${["major","minor"][data[offs+4]&1]} = ${keys[data[offs+4]&1][n+7]})`, size:len};
+    return {val:`Meta:KeySig (${n} ${["major","minor"][data[offs+4]&1]} = "${keys[data[offs+4]&1][n+7]}")`, size:len};
   case 0x7f:
     return {val:"Meta:SeqSpecific",size:len};
   }
@@ -298,8 +313,7 @@ function ChVoice(stat,b1,b2){
 }
 function SysEx(data,offs){
   const len=Delta(data,offs+1);
-  const id=data[offs+1+len.size];
-  return {val:`SysEx (${len.val}, ${GetManufacturer(data,offs+1+len.size)})`, size:len.size+len.val+1};
+  return {val:`SysEx (${len.val}, ${GetSysEx(data,offs+1+len.size)})`, size:len.size+len.val+1};
 }
 function Event(data,offs,runstat){
   if(data[offs]==0xff){
@@ -329,6 +343,10 @@ function Event(data,offs,runstat){
 }
 function MTrk(data,offs,eoc){
   runstat=0;
+  let tick=0;
+
+  WriteLine(`                                 <span class="delta">delta :   tick :</span>`);
+
   for(let i=0;;++i){
     if(offs>=dumpmax)
       return offs;
@@ -338,8 +356,9 @@ function MTrk(data,offs,eoc){
     const ev=Event(data,offs,runstat);
     if(data[offs]>0x80&&data[offs]<0xf0)
       runstat=data[offs];
-    const d=(delta.val+"    ").slice(0,4);
-    Line(data,offs0,delta.size+ev.size, `<span class="delta">delta ${d} :</span> <span class="${ev.class}">${ev.val}</span>`);
+    const d=("     +"+delta.val).slice(-6);
+    tick+=delta.val;
+    Line(data,offs0,delta.size+ev.size, `<span class="delta">${d} = ${("     "+tick).slice(-6)} : </span> <span class="${ev.class}">${ev.val}</span>`);
     offs+=ev.size;
     if(ev.eot){
       if(offs<eoc)
@@ -408,11 +427,14 @@ function DragOver(ev){
 }
 function Drop(ev){
   console.log("drop");
+  document.getElementById("file").value="";
   Clear();
   ev.stopPropagation();
   ev.preventDefault();
-  var files = ev.dataTransfer.files; 
+  const files = ev.dataTransfer.files; 
+  const file=files[0];
   ev.target.style.border="none";
+  document.getElementById("filename").innerText=file.name;
   const reader=new FileReader();
   reader.onload=()=>{
     databuf=new Uint8Array(reader.result);
@@ -423,20 +445,25 @@ function Drop(ev){
 }
 function SelectFile(ev){
   const file=ev.target.files[0];
-  const reader=new FileReader();
-  reader.onload=()=>{
-    databuf=new Uint8Array(reader.result);
-    dumpmax=1000;
-    Dump(databuf);
-  };
-  reader.readAsArrayBuffer(file);
+  if(file){
+    document.getElementById("file").value="";
+    document.getElementById("filename").innerText=file.name;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      databuf=new Uint8Array(reader.result);
+      dumpmax=1000;
+      Dump(databuf);
+    };
+    reader.readAsArrayBuffer(file);
+  }
 }
 function Init(){
   const file=document.getElementById("file");
   const base=document.getElementById("base");
   const text=document.getElementById("text");
   file.addEventListener("change", SelectFile);
-  text.addEventListener("drapover", DragOver);
+  text.addEventListener("dragover", DragOver);
+  text.addEventListener("dragleave",DragLeave);
   text.addEventListener("drop", Drop);
 }
 
