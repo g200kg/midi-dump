@@ -71,7 +71,9 @@ const sysextable=[
 ];
 
 function Clear(){
+  console.log("clear")
   output="";
+  window.scrollTo(0,0);
 }
 function WriteLine(line){
   output+=`<div>${line}</div>`;
@@ -390,8 +392,8 @@ function Chunk(buf,offs){
   const type=Get4s(buf,offs);
   const length=Get4u(buf,offs+4);
   const eoc=offs+8+length;
-  Line(buf,offs,4, `<span class="chunk">Chunk ("${type}")</span>`);
-  Line(buf,offs+4,4,`<span class="chunk">length (${length})</span>`);
+  Line(buf,offs,4, `<span class="Chunk">Chunk ("${type}")</span>`);
+  Line(buf,offs+4,4,`<span class="Chunk">length (${length})</span>`);
   offs+=8;
   switch(type){
   case "MThd": offs=MThd(buf,offs); break;
@@ -482,6 +484,7 @@ function Init(){
   body.addEventListener("dragover", DragOver);
   body.addEventListener("dragleave",DragLeave);
   body.addEventListener("drop", Drop);
+  window.scrollTo(0,0);
 }
 
 window.onload=Init;
