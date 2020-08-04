@@ -1,0 +1,26 @@
+{
+  "name": "midi-dump",
+  "version": "1.0.0",
+  "description": "An online program that dumps MIDI (SMF) files with high readability.",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/g200kg/midi-dump.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/g200kg/midi-dump/issues"
+  },
+  "homepage": "https://github.com/g200kg/midi-dump#readme",
+  "devDependencies": {
+    "eslint": "^7.6.0"
+  }
+}
