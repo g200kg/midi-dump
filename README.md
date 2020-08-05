@@ -3,4 +3,4 @@ An online program that dumps MIDI (SMF) files with high readability.
 
 Available At : [https://g200kg.github.io/midi-dump/](https://g200kg.github.io/midi-dump/)  
 
-![](./images/ss2.png)
+![](./images/ss1.png)
