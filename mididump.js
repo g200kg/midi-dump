@@ -175,22 +175,32 @@ function Delta(data,offs){
   ++offs;
   return {val:delta,size:offs-offs0};
 }
-function DumpBytes(data,offs,n){
+function DumpBytes(data,offs,n,dlt){
   let str=[""];
   let line=0;
   let i;
   while(n>8){
     str[line]+=`<span class="adr">${ToHex(offs,6)}</span> `;
+    if(dlt>0)
+      str[line]+=`<span class="dltbytes">`;
     for(i=0;i<8;++i){
       str[line]+=ToHex(data[offs+i],2)+" ";
+      if(--dlt==0)
+        str[line]+=`</span>`;
     }
+    if(dlt>0)
+      str[line]+=`</span>`;
     n-=8;
     offs+=8;
     str[++line]="";
   }
   str[line]+=`<span class="adr">${ToHex(offs,6)}</span> `;
+  if(dlt>0)
+    str[line]+=`<span class="dltbytes">`;
   for(i=0;i<n;++i){
     str[line]+=ToHex(data[offs+i],2)+" ";
+    if(--dlt==0)
+      str[line]+=`</span>`;
   }
   while(i<8){
     str[line]+="   ";
@@ -198,19 +208,19 @@ function DumpBytes(data,offs,n){
   }
   return str;
 }
-function Line(data,offs,size,val){
-  const b=DumpBytes(data,offs,size);
+function Line(data,offs,size,val,dlt){
+  const b=DumpBytes(data,offs,size,dlt);
   let i;
   for(i=0;i<b.length-1;++i)
     WriteLine(b[i]);
   WriteLine(`${b[i]} ${val}`);
 }
 function MThd(data,offs){
-  Line(data,offs,2, `Format (${Get2u(data,offs)})`);
+  Line(data,offs,2, `Format (${Get2u(data,offs)})`,0);
   offs+=2;
-  Line(data,offs,2, `NumberOfTracks (${Get2u(data,offs)})`);
+  Line(data,offs,2, `NumberOfTracks (${Get2u(data,offs)})`,0);
   offs+=2;
-  Line(data,offs,2, `TimeBase (${Get2d(data,offs)})`);
+  Line(data,offs,2, `TimeBase (${Get2d(data,offs)})`,0);
   offs+=2;
   return offs;
 }
@@ -413,15 +423,15 @@ function MTrk(data,offs,eoc){
       runstat=data[offs];
     const d=("     +"+delta.val).slice(-6);
     tick+=delta.val;
-    Line(data,offs0,delta.size+ev.size, `<span class="delta">${d} = ${("     "+tick).slice(-6)} : </span> <span class="${ev.class}">${ev.val}</span>`);
+    Line(data,offs0,delta.size+ev.size, `<span class="delta">${d} = ${("     "+tick).slice(-6)} : </span> <span class="${ev.class}">${ev.val}</span>`,delta.size);
     offs+=ev.size;
     if(ev.eot){
       if(offs<eoc)
-        Line(data,offs,eoc-offs,"Extra Data after EndOfTrack");
+        Line(data,offs,eoc-offs,"Extra Data after EndOfTrack",0);
       return offs;
     }
     if(offs>=eoc){
-      Line(data,offs,0,"EndOfTrack Not Found");
+      Line(data,offs,0,"EndOfTrack Not Found",0);
       console.log("EndOfTrack Not Found");
       return offs;
     }
@@ -431,8 +441,8 @@ function Chunk(buf,offs){
   const type=Get4s(buf,offs);
   const length=Get4u(buf,offs+4);
   const eoc=offs+8+length;
-  Line(buf,offs,4, `<span class="Chunk">Chunk ("${type}")</span>`);
-  Line(buf,offs+4,4,`<span class="Chunk">length (${length})</span>`);
+  Line(buf,offs,4, `<span class="Chunk">Chunk ("${type}")</span>`,0);
+  Line(buf,offs+4,4,`<span class="Chunk">length (${length})</span>`,0);
   offs+=8;
   switch(type){
   case "MThd": offs=MThd(buf,offs); break;
